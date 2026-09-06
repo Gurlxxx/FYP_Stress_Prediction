@@ -1,6 +1,6 @@
 """
-STRESS CLASSIFICATION WEB APP - REAL MODELS VERSION
-Uses trained Random Forest, LightGBM, MLP, SVM models
+STRESS CLASSIFICATION WEB APP - LIGHTWEIGHT VERSION
+Uses trained Random Forest, LightGBM, SVM models (NO TENSORFLOW)
 """
 
 import streamlit as st
@@ -9,7 +9,6 @@ import numpy as np
 import pickle
 import plotly.graph_objects as go
 import plotly.express as px
-from tensorflow.keras.models import load_model
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -48,16 +47,15 @@ def load_trained_models():
     try:
         rf_model = pickle.load(open('Model_01_RandomForest.pkl', 'rb'))
         lgb_model = pickle.load(open('Model_02_LightGBM.pkl', 'rb'))
-        mlp_model = load_model('Model_03_MLP.h5')
         svm_model = pickle.load(open('Model_04_SVM.pkl', 'rb'))
         scaler = pickle.load(open('Scaler.pkl', 'rb'))
-        return rf_model, lgb_model, mlp_model, svm_model, scaler
+        return rf_model, lgb_model, svm_model, scaler
     except Exception as e:
         st.error(f"❌ Error loading models: {e}")
         st.error("Make sure all model files are in the same directory as the app!")
-        return None, None, None, None, None
+        return None, None, None, None
 
-rf_model, lgb_model, mlp_model, svm_model, scaler = load_trained_models()
+rf_model, lgb_model, svm_model, scaler = load_trained_models()
 
 if rf_model is None:
     st.stop()
@@ -70,14 +68,13 @@ st.sidebar.title("⚙️ Model Settings")
 
 selected_model = st.sidebar.selectbox(
     "Select Model for Predictions:",
-    ["Random Forest (Best)", "LightGBM", "MLP (Deep Learning)", "SVM"]
+    ["Random Forest (BEST - 92.5%)", "LightGBM (84.9%)", "SVM (70.5%)"]
 )
 
 model_map = {
-    "Random Forest (Best)": rf_model,
-    "LightGBM": lgb_model,
-    "MLP (Deep Learning)": mlp_model,
-    "SVM": svm_model
+    "Random Forest (BEST - 92.5%)": rf_model,
+    "LightGBM (84.9%)": lgb_model,
+    "SVM (70.5%)": svm_model
 }
 
 active_model = model_map[selected_model]
@@ -85,11 +82,15 @@ active_model = model_map[selected_model]
 st.sidebar.markdown("---")
 st.sidebar.subheader("📊 Model Performance")
 st.sidebar.markdown("""
-**Best Model:** Random Forest
-- **R² Score:** 0.9254 (92.54% accuracy)
+**🏆 Best Model: Random Forest**
+- **R² Score:** 0.9254 (92.54% accuracy!)
 - **MAE:** 0.96 PSS points
-- **Samples:** 1,387
-- **Features:** 13 biomarkers
+- **Dataset:** 1,387 samples, 13 biomarkers
+
+**Training Summary:**
+- Samples: 1,387 (MIDUS + Dataset2 + DatasetEDA)
+- Features: 13 biomarkers
+- Best Feature: IgA (45.3% importance)
 """)
 
 # ============================================================================
@@ -166,11 +167,10 @@ with tab1:
         # Predict with all models
         rf_pred = rf_model.predict(X_scaled)[0]
         lgb_pred = lgb_model.predict(X_scaled)[0]
-        mlp_pred = mlp_model.predict(X_scaled, verbose=0)[0][0]
         svm_pred = svm_model.predict(X_scaled)[0]
         
         # Ensemble prediction (average)
-        ensemble_pred = (rf_pred + lgb_pred + mlp_pred + svm_pred) / 4
+        ensemble_pred = (rf_pred + lgb_pred + svm_pred) / 3
         
         # Categorize
         def categorize_stress(score):
@@ -214,19 +214,19 @@ with tab1:
         # All predictions
         st.subheader("🤖 All Model Predictions")
         predictions_df = pd.DataFrame({
-            'Model': ['Random Forest', 'LightGBM', 'MLP', 'SVM', 'Ensemble'],
-            'PSS Score': [rf_pred, lgb_pred, mlp_pred, svm_pred, ensemble_pred],
-            'Category': [categorize_stress(p)[0] for p in [rf_pred, lgb_pred, mlp_pred, svm_pred, ensemble_pred]]
+            'Model': ['Random Forest', 'LightGBM', 'SVM', 'Ensemble'],
+            'PSS Score': [rf_pred, lgb_pred, svm_pred, ensemble_pred],
+            'Category': [categorize_stress(p)[0] for p in [rf_pred, lgb_pred, svm_pred, ensemble_pred]]
         })
         st.dataframe(predictions_df, use_container_width=True)
         
         # Visualization
         fig = go.Figure()
         fig.add_trace(go.Bar(
-            x=['RF', 'LGB', 'MLP', 'SVM', 'Ensemble'],
-            y=[rf_pred, lgb_pred, mlp_pred, svm_pred, ensemble_pred],
-            marker_color=['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#6A994E'],
-            text=[f"{p:.2f}" for p in [rf_pred, lgb_pred, mlp_pred, svm_pred, ensemble_pred]],
+            x=['RF\n(92.5%)', 'LGB\n(84.9%)', 'SVM\n(70.5%)', 'Ensemble'],
+            y=[rf_pred, lgb_pred, svm_pred, ensemble_pred],
+            marker_color=['#2E86AB', '#A23B72', '#C73E1D', '#6A994E'],
+            text=[f"{p:.2f}" for p in [rf_pred, lgb_pred, svm_pred, ensemble_pred]],
             textposition='auto'
         ))
         fig.add_hline(y=14, line_dash="dash", line_color="orange", annotation_text="Low/Moderate")
@@ -269,11 +269,10 @@ with tab2:
                 # Predict
                 rf_preds = rf_model.predict(X_scaled)
                 lgb_preds = lgb_model.predict(X_scaled)
-                mlp_preds = mlp_model.predict(X_scaled, verbose=0).flatten()
                 svm_preds = svm_model.predict(X_scaled)
                 
                 # Ensemble
-                ensemble_preds = (rf_preds + lgb_preds + mlp_preds + svm_preds) / 4
+                ensemble_preds = (rf_preds + lgb_preds + svm_preds) / 3
                 
                 # Add to dataframe
                 df['PSS_Prediction'] = ensemble_preds
@@ -315,6 +314,9 @@ with tab3:
     try:
         results_df = pd.read_csv('Model_Performance_Results.csv', index_col=0)
         
+        # Filter to only show RF, LGB, SVM (not MLP)
+        results_df = results_df[['R2', 'MAE']].loc[['Random Forest', 'LightGBM', 'SVM']]
+        
         st.dataframe(results_df, use_container_width=True)
         
         col1, col2 = st.columns(2)
@@ -336,7 +338,11 @@ with tab3:
         ### 🏆 Best Model: Random Forest
         - **R² Score:** 0.9254 (92.54% accuracy!)
         - **MAE:** 0.96 PSS points
-        - **Strengths:** Excellent generalization, fast predictions
+        - **Strengths:** Excellent generalization, fast predictions, interpretable
+        
+        ### Why No MLP?
+        MLP (TensorFlow) requires too many dependencies for Streamlit Cloud.
+        Random Forest provides 92.54% accuracy with no dependencies! ✅
         """)
     
     except FileNotFoundError:
@@ -350,7 +356,8 @@ st.markdown("---")
 st.markdown("""
 <div style="text-align: center; color: #999; font-size: 12px;">
     <p>🧠 Stress Biomarker ML System | Trained on 1,387 samples with 13 biomarkers</p>
-    <p>Models: Random Forest, LightGBM, MLP (Deep Learning), SVM</p>
-    <p>Best Model Accuracy: 92.54% (R² = 0.9254)</p>
+    <p>Models: Random Forest (92.54%), LightGBM (84.86%), SVM (70.54%)</p>
+    <p>Best Model: Random Forest with R² = 0.9254</p>
+    <p>Top Biomarker Feature: IgA (45.3% importance)</p>
 </div>
 """, unsafe_allow_html=True)
